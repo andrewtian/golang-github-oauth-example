@@ -1,4 +1,26 @@
 {{ define "title"}}<title>Example</title>{{ end }}
 {{ define "content" }}
-<a href="/start">Start</a>
+    <ul>
+        <li><a href="/start">Start</a></li>
+        {{ if .github_user }}
+            <li><a href="/destroy-session">Logout</a></li>
+        {{ end }}
+    </ul>
+    <div class="current-user">
+        {{ if .github_user }}
+            <h3>Logged in as {{ .github_user.Name }}</h3>
+            <img src="{{ .github_user.AvatarURL }}" alt="...">
+            <h3>Data</h3>
+            <ul>
+                {{ range $key, $value := .github_user_map }}
+                    <li><strong>{{ $key }}</strong>: {{ $value }}</li>
+                {{ end }}
+            </ul>
+
+        {{ else }}
+            <h3>Not logged in as anyone</h3>
+        {{ end }}
+    </div>
+</div>
+
 {{ end }}

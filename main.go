@@ -1,19 +1,16 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
-	"github.com/google/go-github/github"
-	"github.com/gorilla/mux"
-	"github.com/gorilla/sessions"
-	"golang.org/x/oauth2"
 	"html/template"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
+	"golang.org/x/oauth2"
 )
 
 const (
@@ -30,7 +27,8 @@ const (
 type Config struct {
 	ClientSecret string `json:"clientSecret"`
 	ClientID     string `json:"clientID"`
-	Secret       string `json:"secret"`
+
+	ServerSecret string `json:"serverSecret"`
 }
 
 var (
@@ -65,10 +63,10 @@ func main() {
 	var err error
 	cfg, err = loadConfig(defaultConfigFile)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	store = sessions.NewCookieStore([]byte(cfg.Secret))
+	store = sessions.NewCookieStore([]byte(cfg.ServerSecret))
 
 	oauthCfg = &oauth2.Config{
 		ClientID:     cfg.ClientID,
@@ -84,71 +82,19 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/", HomeHandler)
 	r.HandleFunc("/start", StartHandler)
-	r.HandleFunc("/auth", CallbackHandler)
+	r.HandleFunc("/auth-callback", AuthCallbackHandler)
+	r.HandleFunc("/destroy-session", SessionDestroyHandler)
 
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	http.Handle("/", r)
 
-	port := os.Getenv("PORT")
-	if len(port) == 0 {
-		port = "3000"
+	listenAddr := ":8080"
+
+	envPort := os.Getenv("PORT")
+	if len(envPort) > 0 {
+		listenAddr = ":" + envPort
 	}
 
-	log.Fatalln(http.ListenAndServe(":"+port, nil))
-}
-
-func HomeHandler(w http.ResponseWriter, r *http.Request) {
-	tmpls["home.html"].ExecuteTemplate(w, "base", map[string]interface{}{})
-}
-
-func StartHandler(w http.ResponseWriter, r *http.Request) {
-	b := make([]byte, 16)
-	rand.Read(b)
-
-	state := base64.URLEncoding.EncodeToString(b)
-
-	session, _ := store.Get(r, "sess")
-	session.Values["state"] = state
-	session.Save(r, w)
-
-	url := oauthCfg.AuthCodeURL(state)
-	http.Redirect(w, r, url, 302)
-}
-
-func CallbackHandler(w http.ResponseWriter, r *http.Request) {
-	session, err := store.Get(r, "sess")
-	if err != nil {
-		fmt.Fprintln(w, "aborted")
-		return
-	}
-
-	if r.URL.Query().Get("state") != session.Values["state"] {
-		fmt.Fprintln(w, "no state match; possible csrf OR cookies not enabled")
-		return
-	}
-
-	tkn, err := oauthCfg.Exchange(oauth2.NoContext, r.URL.Query().Get("code"))
-	if err != nil {
-		fmt.Fprintln(w, "there was an issue getting your token")
-		return
-	}
-
-	if !tkn.Valid() {
-		fmt.Fprintln(w, "retreived invalid token")
-		return
-	}
-
-	client := github.NewClient(oauthCfg.Client(oauth2.NoContext, tkn))
-
-	user, _, err := client.Users.Get("")
-	if err != nil {
-		fmt.Println(w, "error getting name")
-		return
-	}
-
-	session.Values["name"] = user.Name
-	session.Values["accessToken"] = tkn.AccessToken
-	session.Save(r, w)
-
-	http.Redirect(w, r, "/", 302)
+	log.Printf("attempting listen on %s", listenAddr)
+	log.Fatalln(http.ListenAndServe(listenAddr, nil))
 }
