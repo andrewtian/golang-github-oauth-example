@@ -93,6 +93,7 @@ func AuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 
 	session.Values["githubUserName"] = user.Name
 	session.Values["githubAccessToken"] = token
+	session.Save(r, w)
 
 	http.Redirect(w, r, "/", 302)
 }
